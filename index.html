@@ -514,6 +514,7 @@ const K_USERS      = "nav_users_v2";
 const K_CURRENT_USER = "nav_current_user";
 const K_SESSION    = "nav_unlocked";
 const K_REMEMBER   = "nav_unlocked_until";
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 
 /* =========================================================
    2. SHA-256（纯 JS，无需联网）
