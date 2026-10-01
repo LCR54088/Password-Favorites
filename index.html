@@ -59,7 +59,7 @@
   .lock-title { font-size: 21px; font-weight: 600; letter-spacing: .5px; }
   .lock-sub   { margin-top: 8px; font-size: 13.5px; color: #8b93a7; }
 
-  .field { position: relative; margin: 26px 0 16px; }
+  .field { position: relative; margin: 16px 0 0; }
   .field input {
     width: 100%;
     padding: 15px 50px 15px 18px;
@@ -95,6 +95,7 @@
     letter-spacing: 2px; cursor: pointer;
     box-shadow: 0 10px 30px rgba(91,140,255,.32);
     transition: transform .2s, box-shadow .2s, opacity .2s;
+    margin-top: 18px;
   }
   .btn-primary:hover:not(:disabled) {
     transform: translateY(-2px);
@@ -116,6 +117,7 @@
   }
   .msg.error { color: #ff6b81; }
   .msg.ok    { color: #4ade80; }
+  .msg.info  { color: #5b8cff; }
 
   @keyframes shake {
     0%,100% { transform: translateX(0); }
@@ -260,7 +262,7 @@
   .empty-ico { font-size: 46px; margin-bottom: 14px; opacity: .85; }
   .empty-state h3 { font-size: 17px; font-weight: 600; margin-bottom: 8px; }
   .empty-state p { font-size: 13.5px; color: #7b8398; margin-bottom: 22px; }
-  .empty-state .btn-primary { width: auto; padding: 13px 30px; letter-spacing: 1px; }
+  .empty-state .btn-primary { width: auto; padding: 13px 30px; letter-spacing: 1px; margin-top: 0; }
 
   .foot { margin-top: 40px; text-align: center; font-size: 12.5px; color: #5a6175; }
 
@@ -323,7 +325,7 @@
   .icon-inputs { flex: 1; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
 
   .modal-actions { display: flex; gap: 10px; margin-top: 24px; }
-  .modal-actions .btn-primary { flex: 1; letter-spacing: 1px; }
+  .modal-actions .btn-primary { flex: 1; letter-spacing: 1px; margin-top: 0; }
   .btn-cancel {
     flex: none; padding: 15px 22px;
     border-radius: 14px; cursor: pointer; font-size: 15px;
@@ -369,12 +371,14 @@
   <div class="lock-card" id="lockCard">
     <div class="lock-badge">🔒</div>
     <h1 class="lock-title">受保护的页面</h1>
-    <p class="lock-sub">输入访问密码以继续</p>
+    <p class="lock-sub">输入用户名和密码以继续</p>
 
     <form id="loginForm" autocomplete="off">
+      <div class="field" style="margin-top: 26px;">
+        <input type="text" id="usernameInput" placeholder="用户名" autocomplete="off" spellcheck="false" style="padding-right: 18px;">
+      </div>
       <div class="field">
-        <input type="password" id="pwdInput" placeholder="请输入密码"
-               autocomplete="off" spellcheck="false">
+        <input type="password" id="pwdInput" placeholder="密码" autocomplete="off" spellcheck="false">
         <button type="button" class="eye" id="eyeBtn" title="显示 / 隐藏密码">👁</button>
       </div>
 
@@ -471,7 +475,7 @@
 <div class="modal-mask" id="pwdMask">
   <div class="modal">
     <h2 class="modal-title">修改密码</h2>
-    <p class="modal-sub">密码仅保存在本机浏览器中</p>
+    <p class="modal-sub">密码仅保存在本机浏览器中，支持字母、数字和符号</p>
 
     <div class="form-row">
       <label>当前密码</label>
@@ -479,7 +483,7 @@
     </div>
     <div class="form-row">
       <label>新密码</label>
-      <input class="input" id="newPwd" type="password" placeholder="至少 4 位">
+      <input class="input" id="newPwd" type="password" placeholder="至少 4 位，支持字母">
     </div>
     <div class="form-row">
       <label>确认新密码</label>
@@ -506,10 +510,10 @@ const DEFAULT_PWD_HASH = "8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c
 const MAX_ATTEMPTS = 5;
 const LOCK_SECONDS = 30;
 
-const K_PWD      = "nav_pwd_hash";
-const K_SITES    = "nav_sites";
-const K_SESSION  = "nav_unlocked";
-const K_REMEMBER = "nav_unlocked_until";
+const K_USERS      = "nav_users_v2";
+const K_CURRENT_USER = "nav_current_user";
+const K_SESSION    = "nav_unlocked";
+const K_REMEMBER   = "nav_unlocked_until";
 
 /* =========================================================
    2. SHA-256（纯 JS，无需联网）
@@ -574,37 +578,51 @@ function sha256Hex(input) {
 }
 
 /* =========================================================
-   3. 数据层
+   3. 数据层（多用户）
    ========================================================= */
-function getPwdHash() {
-  return localStorage.getItem(K_PWD) || DEFAULT_PWD_HASH;
-}
-function setPwdHash(h) {
-  localStorage.setItem(K_PWD, h);
-}
-
-let sites = loadSites();
-function loadSites() {
+function getUsers() {
   try {
-    const raw = localStorage.getItem(K_SITES);
-    const arr = raw ? JSON.parse(raw) : [];
-    return Array.isArray(arr) ? arr : [];
-  } catch (e) { return []; }
+    const raw = localStorage.getItem(K_USERS);
+    if (raw) return JSON.parse(raw);
+  } catch (e) {}
+  // 首次初始化默认用户 admin
+  const defaultUsers = {
+    "admin": {
+      pwdHash: DEFAULT_PWD_HASH,
+      sites: []
+    }
+  };
+  // 兼容旧版本数据迁移
+  try {
+    const oldSites = localStorage.getItem("nav_sites");
+    if (oldSites) {
+      defaultUsers["admin"].sites = JSON.parse(oldSites);
+    }
+  } catch(e) {}
+  return defaultUsers;
 }
+
+function saveUsers(users) {
+  localStorage.setItem(K_USERS, JSON.stringify(users));
+}
+
+let currentUser = localStorage.getItem(K_CURRENT_USER) || "";
+let sites = [];
+
+function loadSites() {
+  const users = getUsers();
+  if (currentUser && users[currentUser]) {
+    return users[currentUser].sites || [];
+  }
+  return [];
+}
+
 function saveSites() {
-  localStorage.setItem(K_SITES, JSON.stringify(sites));
-}
-
-const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
-
-function normalizeUrl(u) {
-  u = u.trim();
-  if (/^https?:\/\//i.test(u)) return u;
-  if (/^\/\//.test(u)) return "https:" + u;
-  return "https://" + u;
-}
-function hostOf(u) {
-  try { return new URL(u).hostname.replace(/^www\./, ""); } catch (e) { return ""; }
+  const users = getUsers();
+  if (currentUser && users[currentUser]) {
+    users[currentUser].sites = sites;
+    saveUsers(users);
+  }
 }
 
 /* =========================================================
@@ -614,6 +632,7 @@ const $ = id => document.getElementById(id);
 
 const lockScreen = $("lockScreen"), appScreen = $("appScreen");
 const lockCard = $("lockCard"), loginForm = $("loginForm");
+const usernameInput = $("usernameInput");
 const pwdInput = $("pwdInput"), loginBtn = $("loginBtn"), eyeBtn = $("eyeBtn");
 const msgEl = $("msg"), rememberChk = $("rememberChk");
 const searchInput = $("searchInput"), contentEl = $("content");
@@ -712,17 +731,35 @@ loginForm.addEventListener("submit", e => {
     return;
   }
 
+  const username = usernameInput.value.trim();
   const pwd = pwdInput.value;
-  if (!pwd) { setMsg("请输入密码", "error"); shake(); return; }
+
+  if (!username) { setMsg("请输入用户名", "error"); shake(); usernameInput.focus(); return; }
+  if (!pwd) { setMsg("请输入密码", "error"); shake(); pwdInput.focus(); return; }
 
   loginBtn.disabled = true;
   loginBtn.textContent = "验证中…";
 
+  const users = getUsers();
+  let user = users[username];
+
+  // 新用户自动创建，默认密码 123456
+  if (!user) {
+    user = { pwdHash: DEFAULT_PWD_HASH, sites: [] };
+    users[username] = user;
+    saveUsers(users);
+    setMsg("新用户已创建，默认密码 123456", "info");
+  }
+
   let ok = false;
-  try { ok = sha256Hex(pwd) === getPwdHash(); } catch (err) { ok = false; }
+  try { ok = sha256Hex(pwd) === user.pwdHash; } catch (err) { ok = false; }
 
   if (ok) {
     attempts = 0;
+    currentUser = username;
+    localStorage.setItem(K_CURRENT_USER, username);
+    sites = user.sites || [];
+
     setMsg("验证成功，正在进入…", "ok");
     sessionStorage.setItem(K_SESSION, "1");
     if (rememberChk.checked) {
@@ -733,6 +770,7 @@ loginForm.addEventListener("submit", e => {
     attempts++;
     pwdInput.value = "";
     shake();
+
     if (attempts >= MAX_ATTEMPTS) {
       attempts = 0;
       lockUntil = Date.now() + LOCK_SECONDS * 1000;
@@ -787,11 +825,14 @@ function buildCard(s) {
   return card;
 }
 
+function hostOf(u) {
+  try { return new URL(u).hostname.replace(/^www\./, ""); } catch (e) { return ""; }
+}
+
 function render(filter) {
   const q = (filter || "").trim().toLowerCase();
   contentEl.innerHTML = "";
 
-  // 没有任何网站 → 空状态引导
   if (sites.length === 0) {
     const box = document.createElement("div");
     box.className = "empty-state";
@@ -821,7 +862,6 @@ function render(filter) {
     return;
   }
 
-  // 按分类分组（保持添加顺序）
   const groups = new Map();
   list.forEach(s => {
     const c = (s.cat || "").trim() || "未分类";
@@ -944,6 +984,13 @@ function saveSite() {
   hideModal(siteMask);
 }
 
+function normalizeUrl(u) {
+  u = u.trim();
+  if (/^https?:\/\//i.test(u)) return u;
+  if (/^\/\//.test(u)) return "https:" + u;
+  return "https://" + u;
+}
+
 function deleteSite(id) {
   const s = sites.find(x => x.id === id);
   if (!s) return;
@@ -972,16 +1019,20 @@ function changePassword() {
 
   if (!cur) { toast("请输入当前密码", "error"); oldPwd.focus(); return; }
 
+  const users = getUsers();
+  const user = users[currentUser];
+  if (!user) { toast("用户信息异常", "error"); return; }
+
   let okCur = false;
-  try { okCur = sha256Hex(cur) === getPwdHash(); } catch (e) { okCur = false; }
+  try { okCur = sha256Hex(cur) === user.pwdHash; } catch (e) { okCur = false; }
   if (!okCur) { toast("当前密码不正确", "error"); oldPwd.value = ""; oldPwd.focus(); return; }
 
   if (np.length < 4) { toast("新密码至少 4 位", "error"); newPwd.focus(); return; }
   if (np !== cp)     { toast("两次输入的新密码不一致", "error"); confirmPwd.value = ""; confirmPwd.focus(); return; }
   if (np === cur)    { toast("新密码不能与当前密码相同", "error"); newPwd.focus(); return; }
 
-  setPwdHash(sha256Hex(np));
-  // 保持当前会话已解锁状态
+  user.pwdHash = sha256Hex(np);
+  saveUsers(users);
   sessionStorage.setItem(K_SESSION, "1");
   hideModal(pwdMask);
   toast("密码修改成功", "ok");
@@ -991,16 +1042,16 @@ function changePassword() {
    10. 导出 / 导入
    ========================================================= */
 function exportData() {
-  const data = { version: 1, pwdHash: getPwdHash(), sites };
+  const data = { version: 1, currentUser, sites };
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
-  a.download = "nav-backup-" + new Date().toISOString().slice(0, 10) + ".json";
+  a.download = "nav-backup-" + currentUser + "-" + new Date().toISOString().slice(0, 10) + ".json";
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
   setTimeout(() => URL.revokeObjectURL(a.href), 1500);
-  toast("已导出备份文件", "ok");
+  toast("已导出当前用户的备份文件", "ok");
 }
 
 function importData(file) {
@@ -1019,12 +1070,11 @@ function importData(file) {
           cat: s.cat || "未分类"
         }));
         saveSites();
+        render(searchInput.value);
+        toast("导入成功，已覆盖当前用户的收藏夹", "ok");
+      } else {
+        toast("文件格式错误", "error");
       }
-      if (typeof data.pwdHash === "string" && /^[0-9a-f]{64}$/i.test(data.pwdHash)) {
-        setPwdHash(data.pwdHash);
-      }
-      render(searchInput.value);
-      toast("导入成功", "ok");
     } catch (e) {
       toast("文件格式错误", "error");
     }
@@ -1050,7 +1100,6 @@ fileInput.addEventListener("change", () => {
 siteEmoji.addEventListener("input", updateIconPreview);
 siteImg.addEventListener("input", updateIconPreview);
 
-// 弹窗内回车快捷保存
 [siteName, siteUrl, siteEmoji, siteImg, siteCat, siteDesc].forEach(el => {
   el.addEventListener("keydown", e => {
     if (e.key === "Enter") { e.preventDefault(); saveSite(); }
@@ -1079,7 +1128,7 @@ $("logoutBtn").addEventListener("click", () => {
   loginBtn.disabled = false;
   loginBtn.textContent = "进 入";
   setMsg("");
-  pwdInput.focus();
+  usernameInput.focus();
 });
 
 searchInput.addEventListener("input", () => render(searchInput.value));
@@ -1099,19 +1148,27 @@ function greeting() {
 function showApp() {
   lockScreen.classList.add("hidden");
   appScreen.classList.remove("hidden");
-  welcomeEl.textContent = greeting() + "，欢迎回来";
+
+  const savedUser = localStorage.getItem(K_CURRENT_USER);
+  welcomeEl.textContent = greeting() + "，" + (savedUser || "用户") + "！";
+
   searchInput.value = "";
   render("");
   setTimeout(() => searchInput.focus(), 80);
 }
 
 (function init() {
+  const savedUser = localStorage.getItem(K_CURRENT_USER);
+  if (savedUser) usernameInput.value = savedUser;
+
   if (isUnlocked()) {
+    currentUser = savedUser || "admin";
+    sites = loadSites();
     showApp();
   } else {
-    pwdInput.focus();
+    usernameInput.focus();
   }
-  console.log("%c默认密码 123456（进入后可在「修改密码」中更改）", "color:#5b8cff;font-size:12px");
+  console.log("%c默认密码 123456（进入后可在「修改密码」中更改，支持字母）", "color:#5b8cff;font-size:12px");
 })();
 </script>
 </body>
