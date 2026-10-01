@@ -1,0 +1,1118 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>私人导航 · 密码访问</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { min-height: 100%; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+                 "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    background: #0a0c11;
+    color: #e8ecf3;
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+  }
+  body::before {
+    content: "";
+    position: fixed; inset: 0; z-index: 0; pointer-events: none;
+    background:
+      radial-gradient(700px 500px at 12% 8%,  rgba(91,140,255,.22), transparent 62%),
+      radial-gradient(800px 600px at 88% 92%, rgba(168,85,247,.20), transparent 62%),
+      radial-gradient(600px 500px at 75% 12%, rgba(34,211,238,.12), transparent 62%);
+  }
+  .hidden { display: none !important; }
+  .screen { position: relative; z-index: 1; }
+  button { font-family: inherit; }
+
+  /* ================= 锁屏 ================= */
+  #lockScreen {
+    min-height: 100vh;
+    display: flex; align-items: center; justify-content: center;
+    padding: 24px;
+  }
+  .lock-card {
+    width: 100%; max-width: 400px;
+    padding: 40px 32px 32px;
+    border-radius: 24px;
+    background: rgba(255,255,255,.055);
+    border: 1px solid rgba(255,255,255,.10);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+    box-shadow: 0 30px 80px rgba(0,0,0,.55);
+    text-align: center;
+    animation: pop .5s cubic-bezier(.2,.8,.3,1.1) both;
+  }
+  @keyframes pop {
+    from { opacity: 0; transform: translateY(18px) scale(.97); }
+    to   { opacity: 1; transform: none; }
+  }
+  .lock-badge {
+    width: 64px; height: 64px; margin: 0 auto 18px;
+    display: grid; place-items: center;
+    font-size: 28px; border-radius: 20px;
+    background: linear-gradient(135deg, rgba(91,140,255,.30), rgba(168,85,247,.30));
+    border: 1px solid rgba(255,255,255,.14);
+  }
+  .lock-title { font-size: 21px; font-weight: 600; letter-spacing: .5px; }
+  .lock-sub   { margin-top: 8px; font-size: 13.5px; color: #8b93a7; }
+
+  .field { position: relative; margin: 26px 0 16px; }
+  .field input {
+    width: 100%;
+    padding: 15px 50px 15px 18px;
+    border-radius: 14px;
+    border: 1px solid rgba(255,255,255,.12);
+    background: rgba(0,0,0,.30);
+    color: #e8ecf3;
+    font-size: 16px;
+    letter-spacing: 2px;
+    outline: none;
+    transition: border-color .22s, box-shadow .22s;
+  }
+  .field input::placeholder { letter-spacing: 0; color: #6b7386; }
+  .field input:focus {
+    border-color: #5b8cff;
+    box-shadow: 0 0 0 4px rgba(91,140,255,.16);
+  }
+  .eye {
+    position: absolute; right: 7px; top: 50%; transform: translateY(-50%);
+    width: 38px; height: 38px;
+    display: grid; place-items: center;
+    background: none; border: none; border-radius: 11px;
+    color: #8b93a7; font-size: 17px; cursor: pointer;
+    transition: .2s;
+  }
+  .eye:hover { color: #e8ecf3; background: rgba(255,255,255,.07); }
+
+  .btn-primary {
+    width: 100%; padding: 15px;
+    border: none; border-radius: 14px;
+    background: linear-gradient(135deg, #5b8cff, #8b5cf6);
+    color: #fff; font-size: 16px; font-weight: 600;
+    letter-spacing: 2px; cursor: pointer;
+    box-shadow: 0 10px 30px rgba(91,140,255,.32);
+    transition: transform .2s, box-shadow .2s, opacity .2s;
+  }
+  .btn-primary:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 16px 38px rgba(91,140,255,.45);
+  }
+  .btn-primary:active:not(:disabled) { transform: translateY(0); }
+  .btn-primary:disabled { opacity: .55; cursor: not-allowed; }
+
+  .remember {
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    margin-top: 15px; font-size: 13px; color: #8b93a7;
+    cursor: pointer; user-select: none;
+  }
+  .remember input { width: 15px; height: 15px; accent-color: #5b8cff; cursor: pointer; }
+
+  .msg {
+    margin-top: 14px; min-height: 18px;
+    font-size: 13px; color: #8b93a7; transition: color .2s;
+  }
+  .msg.error { color: #ff6b81; }
+  .msg.ok    { color: #4ade80; }
+
+  @keyframes shake {
+    0%,100% { transform: translateX(0); }
+    20% { transform: translateX(-10px); }
+    40% { transform: translateX(10px); }
+    60% { transform: translateX(-6px); }
+    80% { transform: translateX(6px); }
+  }
+  .shake { animation: shake .42s ease; }
+
+  /* ================= 主界面 ================= */
+  #appScreen { padding: 30px clamp(16px, 4vw, 56px) 56px; }
+  .wrap { max-width: 1200px; margin: 0 auto; }
+
+  .topbar {
+    display: flex; flex-wrap: wrap; gap: 16px;
+    align-items: center; justify-content: space-between;
+    margin-bottom: 30px;
+  }
+  .brand { display: flex; align-items: center; gap: 14px; }
+  .logo {
+    width: 48px; height: 48px; flex: none;
+    display: grid; place-items: center;
+    font-size: 22px; border-radius: 15px;
+    background: linear-gradient(135deg, rgba(91,140,255,.30), rgba(168,85,247,.30));
+    border: 1px solid rgba(255,255,255,.12);
+  }
+  .brand h1 { font-size: 19px; font-weight: 600; }
+  .brand p  { font-size: 12.5px; color: #8b93a7; margin-top: 3px; }
+
+  .tools { display: flex; gap: 9px; align-items: center; flex-wrap: wrap; }
+  .search {
+    display: flex; align-items: center; gap: 8px;
+    height: 42px; padding: 0 14px;
+    border-radius: 13px;
+    background: rgba(255,255,255,.05);
+    border: 1px solid rgba(255,255,255,.10);
+    transition: .2s;
+  }
+  .search:focus-within {
+    border-color: rgba(91,140,255,.6);
+    background: rgba(255,255,255,.08);
+  }
+  .search span { opacity: .6; font-size: 14px; }
+  .search input {
+    width: 170px; border: none; background: none; outline: none;
+    color: #e8ecf3; font-size: 14px; font-family: inherit;
+  }
+  .search input::placeholder { color: #6b7386; }
+
+  .btn-ghost {
+    height: 42px; padding: 0 16px;
+    border-radius: 13px; cursor: pointer; font-size: 13.5px;
+    color: #c9d1e0;
+    background: rgba(255,255,255,.05);
+    border: 1px solid rgba(255,255,255,.10);
+    transition: .2s; white-space: nowrap;
+  }
+  .btn-ghost:hover {
+    background: rgba(91,140,255,.16);
+    border-color: rgba(91,140,255,.42);
+    color: #dbe6ff;
+  }
+  .btn-ghost.danger:hover {
+    background: rgba(255,107,129,.14);
+    border-color: rgba(255,107,129,.40);
+    color: #ff8fa0;
+  }
+
+  .group { margin-bottom: 30px; animation: pop .45s ease both; }
+  .group-title {
+    display: flex; align-items: center; gap: 10px;
+    font-size: 14px; font-weight: 600; letter-spacing: .5px;
+    color: #a9b2c6; margin-bottom: 14px;
+  }
+  .group-title::after {
+    content: ""; flex: 1; height: 1px;
+    background: linear-gradient(90deg, rgba(255,255,255,.13), transparent);
+  }
+
+  .grid {
+    display: grid; gap: 12px;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  }
+  .card {
+    position: relative;
+    display: flex; align-items: center; gap: 12px;
+    padding: 13px 14px;
+    border-radius: 16px;
+    background: rgba(255,255,255,.045);
+    border: 1px solid rgba(255,255,255,.08);
+    cursor: pointer;
+    transition: transform .2s, background .2s, border-color .2s, box-shadow .2s;
+  }
+  .card:hover {
+    background: rgba(255,255,255,.09);
+    border-color: rgba(91,140,255,.55);
+    transform: translateY(-3px);
+    box-shadow: 0 14px 34px rgba(0,0,0,.42);
+  }
+  .card:active { transform: translateY(-1px); }
+
+  .ico {
+    width: 38px; height: 38px; flex: none;
+    display: grid; place-items: center;
+    font-size: 18px; border-radius: 12px;
+    background: rgba(255,255,255,.07);
+    border: 1px solid rgba(255,255,255,.07);
+    overflow: hidden;
+  }
+  .ico img { width: 100%; height: 100%; object-fit: cover; }
+
+  .meta { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+  .nm {
+    font-size: 14.5px; font-weight: 500;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .ds {
+    font-size: 12px; color: #7b8398;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+
+  .actions { display: flex; gap: 4px; flex: none; opacity: 0; transition: opacity .18s; }
+  .card:hover .actions { opacity: 1; }
+  .mini {
+    width: 28px; height: 28px; border-radius: 9px;
+    border: none; background: rgba(255,255,255,.08);
+    color: #b9c2d4; cursor: pointer; font-size: 13px;
+    display: grid; place-items: center; transition: .18s;
+  }
+  .mini:hover { background: rgba(91,140,255,.30); color: #fff; }
+  .mini[data-act="del"]:hover { background: rgba(255,107,129,.32); color: #ffc2cc; }
+  @media (hover: none) { .actions { opacity: 1; } }
+
+  .empty { padding: 70px 0; text-align: center; color: #6b7386; font-size: 15px; }
+  .empty-state {
+    padding: 70px 20px; text-align: center;
+    border: 1px dashed rgba(255,255,255,.14);
+    border-radius: 22px;
+    background: rgba(255,255,255,.02);
+  }
+  .empty-ico { font-size: 46px; margin-bottom: 14px; opacity: .85; }
+  .empty-state h3 { font-size: 17px; font-weight: 600; margin-bottom: 8px; }
+  .empty-state p { font-size: 13.5px; color: #7b8398; margin-bottom: 22px; }
+  .empty-state .btn-primary { width: auto; padding: 13px 30px; letter-spacing: 1px; }
+
+  .foot { margin-top: 40px; text-align: center; font-size: 12.5px; color: #5a6175; }
+
+  /* ================= 弹窗 ================= */
+  .modal-mask {
+    position: fixed; inset: 0; z-index: 100;
+    display: flex; align-items: center; justify-content: center;
+    padding: 20px;
+    background: rgba(6,8,12,.74);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    opacity: 0; pointer-events: none;
+    transition: opacity .22s;
+  }
+  .modal-mask.show { opacity: 1; pointer-events: auto; }
+  .modal {
+    width: 100%; max-width: 470px;
+    max-height: 88vh; overflow-y: auto;
+    padding: 26px 24px;
+    border-radius: 22px;
+    background: #131722;
+    border: 1px solid rgba(255,255,255,.10);
+    box-shadow: 0 30px 90px rgba(0,0,0,.65);
+    transform: translateY(16px) scale(.97);
+    transition: transform .26s cubic-bezier(.2,.8,.3,1.1);
+  }
+  .modal-mask.show .modal { transform: none; }
+  .modal-title { font-size: 18px; font-weight: 600; }
+  .modal-sub { font-size: 12.5px; color: #8b93a7; margin-top: 6px; }
+
+  .form-row { margin-top: 16px; }
+  .form-row > label {
+    display: block; font-size: 12.5px; color: #8b93a7;
+    margin-bottom: 7px; letter-spacing: .4px;
+  }
+  .input {
+    width: 100%; padding: 11px 13px;
+    border-radius: 11px;
+    border: 1px solid rgba(255,255,255,.12);
+    background: rgba(0,0,0,.28);
+    color: #e8ecf3; font-size: 14.5px;
+    font-family: inherit; outline: none;
+    transition: border-color .2s, box-shadow .2s;
+  }
+  .input::placeholder { color: #616a7e; }
+  .input:focus {
+    border-color: #5b8cff;
+    box-shadow: 0 0 0 3px rgba(91,140,255,.15);
+  }
+
+  .icon-row { display: flex; gap: 12px; align-items: flex-start; }
+  .icon-preview {
+    width: 50px; height: 50px; flex: none;
+    display: grid; place-items: center;
+    border-radius: 14px; font-size: 22px; overflow: hidden;
+    background: rgba(255,255,255,.06);
+    border: 1px solid rgba(255,255,255,.10);
+  }
+  .icon-preview img { width: 100%; height: 100%; object-fit: cover; }
+  .icon-inputs { flex: 1; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+
+  .modal-actions { display: flex; gap: 10px; margin-top: 24px; }
+  .modal-actions .btn-primary { flex: 1; letter-spacing: 1px; }
+  .btn-cancel {
+    flex: none; padding: 15px 22px;
+    border-radius: 14px; cursor: pointer; font-size: 15px;
+    color: #c9d1e0;
+    background: rgba(255,255,255,.05);
+    border: 1px solid rgba(255,255,255,.12);
+    transition: .2s;
+  }
+  .btn-cancel:hover { background: rgba(255,255,255,.10); }
+
+  /* ================= Toast ================= */
+  .toast {
+    position: fixed; left: 50%; bottom: 34px;
+    transform: translate(-50%, 20px);
+    z-index: 300; padding: 12px 24px;
+    border-radius: 13px; font-size: 14px;
+    background: rgba(30,36,48,.97);
+    border: 1px solid rgba(255,255,255,.12);
+    box-shadow: 0 16px 44px rgba(0,0,0,.55);
+    opacity: 0; pointer-events: none;
+    transition: opacity .25s, transform .25s;
+    white-space: nowrap;
+  }
+  .toast.show { opacity: 1; transform: translate(-50%, 0); }
+  .toast.ok    { border-color: rgba(74,222,128,.55); }
+  .toast.error { border-color: rgba(255,107,129,.55); }
+
+  @media (max-width: 560px) {
+    .lock-card { padding: 32px 22px; }
+    .search input { width: 110px; }
+    .grid { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); }
+    .card { padding: 11px 12px; gap: 10px; }
+    .ico { width: 34px; height: 34px; font-size: 16px; }
+    .btn-ghost { padding: 0 12px; font-size: 13px; }
+    .modal { padding: 22px 18px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ================= 锁屏 ================= -->
+<div id="lockScreen" class="screen">
+  <div class="lock-card" id="lockCard">
+    <div class="lock-badge">🔒</div>
+    <h1 class="lock-title">受保护的页面</h1>
+    <p class="lock-sub">输入访问密码以继续</p>
+
+    <form id="loginForm" autocomplete="off">
+      <div class="field">
+        <input type="password" id="pwdInput" placeholder="请输入密码"
+               autocomplete="off" spellcheck="false">
+        <button type="button" class="eye" id="eyeBtn" title="显示 / 隐藏密码">👁</button>
+      </div>
+
+      <button type="submit" class="btn-primary" id="loginBtn">进 入</button>
+
+      <label class="remember">
+        <input type="checkbox" id="rememberChk">
+        <span>记住我 7 天</span>
+      </label>
+    </form>
+
+    <p class="msg" id="msg"></p>
+  </div>
+</div>
+
+<!-- ================= 主界面 ================= -->
+<div id="appScreen" class="screen hidden">
+  <div class="wrap">
+    <header class="topbar">
+      <div class="brand">
+        <span class="logo">🚀</span>
+        <div>
+          <h1>我的导航</h1>
+          <p id="welcome">欢迎回来</p>
+        </div>
+      </div>
+      <div class="tools">
+        <div class="search">
+          <span>🔎</span>
+          <input id="searchInput" type="text" placeholder="搜索网站…">
+        </div>
+        <button class="btn-ghost" id="addBtn">＋ 添加网站</button>
+        <button class="btn-ghost" id="pwdBtn">🔑 修改密码</button>
+        <button class="btn-ghost" id="exportBtn">导出</button>
+        <button class="btn-ghost" id="importBtn">导入</button>
+        <button class="btn-ghost danger" id="logoutBtn">退出</button>
+      </div>
+    </header>
+
+    <main id="content"></main>
+
+    <footer class="foot">
+      共 <span id="siteCount">0</span> 个站点 · 点击卡片在新标签页打开 · 悬停卡片可编辑或删除
+    </footer>
+  </div>
+</div>
+
+<!-- ================= 网站 添加/编辑 弹窗 ================= -->
+<div class="modal-mask" id="siteMask">
+  <div class="modal">
+    <h2 class="modal-title" id="siteModalTitle">添加网站</h2>
+    <p class="modal-sub">图标支持 Emoji 或图片链接，留空自动使用 🌐</p>
+
+    <div class="form-row">
+      <label>网站名称 *</label>
+      <input class="input" id="siteName" type="text" placeholder="例如：GitHub" maxlength="40">
+    </div>
+
+    <div class="form-row">
+      <label>网站地址 *</label>
+      <input class="input" id="siteUrl" type="text" placeholder="例如：github.com" spellcheck="false">
+    </div>
+
+    <div class="form-row">
+      <label>图标（可选）</label>
+      <div class="icon-row">
+        <div class="icon-preview" id="iconPreview">🌐</div>
+        <div class="icon-inputs">
+          <input class="input" id="siteEmoji" type="text" placeholder="Emoji，如 🐙" maxlength="16">
+          <input class="input" id="siteImg" type="text" placeholder="或图片链接 https://.../icon.png" spellcheck="false">
+        </div>
+      </div>
+    </div>
+
+    <div class="form-row">
+      <label>分类（可选）</label>
+      <input class="input" id="siteCat" type="text" placeholder="例如：开发工具" list="catList" maxlength="20">
+      <datalist id="catList"></datalist>
+    </div>
+
+    <div class="form-row">
+      <label>描述（可选）</label>
+      <input class="input" id="siteDesc" type="text" placeholder="一句话说明" maxlength="40">
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn-cancel" data-close>取消</button>
+      <button class="btn-primary" id="siteSaveBtn">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================= 修改密码 弹窗 ================= -->
+<div class="modal-mask" id="pwdMask">
+  <div class="modal">
+    <h2 class="modal-title">修改密码</h2>
+    <p class="modal-sub">密码仅保存在本机浏览器中</p>
+
+    <div class="form-row">
+      <label>当前密码</label>
+      <input class="input" id="oldPwd" type="password" placeholder="请输入当前密码">
+    </div>
+    <div class="form-row">
+      <label>新密码</label>
+      <input class="input" id="newPwd" type="password" placeholder="至少 4 位">
+    </div>
+    <div class="form-row">
+      <label>确认新密码</label>
+      <input class="input" id="confirmPwd" type="password" placeholder="再次输入新密码">
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn-cancel" data-close>取消</button>
+      <button class="btn-primary" id="pwdSaveBtn">确认修改</button>
+    </div>
+  </div>
+</div>
+
+<!-- 隐藏的文件选择（导入用） -->
+<input type="file" id="fileInput" accept="application/json,.json" style="display:none">
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* =========================================================
+   1. 常量与存储键
+   ========================================================= */
+const DEFAULT_PWD_HASH = "8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92"; // 123456
+const MAX_ATTEMPTS = 5;
+const LOCK_SECONDS = 30;
+
+const K_PWD      = "nav_pwd_hash";
+const K_SITES    = "nav_sites";
+const K_SESSION  = "nav_unlocked";
+const K_REMEMBER = "nav_unlocked_until";
+
+/* =========================================================
+   2. SHA-256（纯 JS，无需联网）
+   ========================================================= */
+function sha256Hex(input) {
+  const bytes = new TextEncoder().encode(input);
+  const K = new Uint32Array([
+    0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,
+    0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,
+    0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,
+    0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,
+    0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,
+    0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,
+    0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,
+    0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2
+  ]);
+  const H = new Uint32Array([
+    0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,
+    0x510e527f,0x9b05688c,0x1f83d9ab,0x5be0cd19
+  ]);
+  const rotr = (x, n) => (x >>> n) | (x << (32 - n));
+
+  const len = bytes.length, bitLen = len * 8;
+  const total = Math.ceil((len + 9) / 64) * 64;
+  const msg = new Uint8Array(total);
+  msg.set(bytes);
+  msg[len] = 0x80;
+
+  const dv = new DataView(msg.buffer);
+  dv.setUint32(total - 8, Math.floor(bitLen / 4294967296));
+  dv.setUint32(total - 4, bitLen % 4294967296);
+
+  const w = new Uint32Array(64);
+  for (let i = 0; i < total; i += 64) {
+    for (let t = 0; t < 16; t++) w[t] = dv.getUint32(i + t * 4);
+    for (let t = 16; t < 64; t++) {
+      const x = w[t - 15], y = w[t - 2];
+      const s0 = rotr(x, 7) ^ rotr(x, 18) ^ (x >>> 3);
+      const s1 = rotr(y, 17) ^ rotr(y, 19) ^ (y >>> 10);
+      w[t] = (w[t - 16] + s0 + w[t - 7] + s1) >>> 0;
+    }
+    let a = H[0], b = H[1], c = H[2], d = H[3];
+    let e = H[4], f = H[5], g = H[6], h = H[7];
+    for (let t = 0; t < 64; t++) {
+      const S1 = rotr(e, 6) ^ rotr(e, 11) ^ rotr(e, 25);
+      const ch = (e & f) ^ (~e & g);
+      const t1 = (h + S1 + ch + K[t] + w[t]) >>> 0;
+      const S0 = rotr(a, 2) ^ rotr(a, 13) ^ rotr(a, 22);
+      const maj = (a & b) ^ (a & c) ^ (b & c);
+      const t2 = (S0 + maj) >>> 0;
+      h = g; g = f; f = e;
+      e = (d + t1) >>> 0;
+      d = c; c = b; b = a;
+      a = (t1 + t2) >>> 0;
+    }
+    H[0] = (H[0] + a) >>> 0; H[1] = (H[1] + b) >>> 0;
+    H[2] = (H[2] + c) >>> 0; H[3] = (H[3] + d) >>> 0;
+    H[4] = (H[4] + e) >>> 0; H[5] = (H[5] + f) >>> 0;
+    H[6] = (H[6] + g) >>> 0; H[7] = (H[7] + h) >>> 0;
+  }
+  return Array.from(H).map(v => v.toString(16).padStart(8, "0")).join("");
+}
+
+/* =========================================================
+   3. 数据层
+   ========================================================= */
+function getPwdHash() {
+  return localStorage.getItem(K_PWD) || DEFAULT_PWD_HASH;
+}
+function setPwdHash(h) {
+  localStorage.setItem(K_PWD, h);
+}
+
+let sites = loadSites();
+function loadSites() {
+  try {
+    const raw = localStorage.getItem(K_SITES);
+    const arr = raw ? JSON.parse(raw) : [];
+    return Array.isArray(arr) ? arr : [];
+  } catch (e) { return []; }
+}
+function saveSites() {
+  localStorage.setItem(K_SITES, JSON.stringify(sites));
+}
+
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+
+function normalizeUrl(u) {
+  u = u.trim();
+  if (/^https?:\/\//i.test(u)) return u;
+  if (/^\/\//.test(u)) return "https:" + u;
+  return "https://" + u;
+}
+function hostOf(u) {
+  try { return new URL(u).hostname.replace(/^www\./, ""); } catch (e) { return ""; }
+}
+
+/* =========================================================
+   4. DOM
+   ========================================================= */
+const $ = id => document.getElementById(id);
+
+const lockScreen = $("lockScreen"), appScreen = $("appScreen");
+const lockCard = $("lockCard"), loginForm = $("loginForm");
+const pwdInput = $("pwdInput"), loginBtn = $("loginBtn"), eyeBtn = $("eyeBtn");
+const msgEl = $("msg"), rememberChk = $("rememberChk");
+const searchInput = $("searchInput"), contentEl = $("content");
+const countEl = $("siteCount"), welcomeEl = $("welcome");
+
+const siteMask = $("siteMask"), siteModalTitle = $("siteModalTitle");
+const siteName = $("siteName"), siteUrl = $("siteUrl");
+const siteEmoji = $("siteEmoji"), siteImg = $("siteImg");
+const siteCat = $("siteCat"), siteDesc = $("siteDesc");
+const iconPreview = $("iconPreview"), catList = $("catList");
+
+const pwdMask = $("pwdMask");
+const oldPwd = $("oldPwd"), newPwd = $("newPwd"), confirmPwd = $("confirmPwd");
+
+const toastEl = $("toast"), fileInput = $("fileInput");
+
+/* =========================================================
+   5. Toast / 弹窗工具
+   ========================================================= */
+let toastTimer = null;
+function toast(text, type) {
+  toastEl.textContent = text;
+  toastEl.className = "toast show" + (type ? " " + type : "");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { toastEl.className = "toast"; }, 2200);
+}
+
+function showModal(m) { m.classList.add("show"); document.body.style.overflow = "hidden"; }
+function hideModal(m) { m.classList.remove("show"); document.body.style.overflow = ""; }
+
+document.querySelectorAll(".modal-mask").forEach(mask => {
+  mask.addEventListener("click", e => {
+    if (e.target === mask || e.target.hasAttribute("data-close")) hideModal(mask);
+  });
+});
+document.addEventListener("keydown", e => {
+  if (e.key !== "Escape") return;
+  const open = document.querySelector(".modal-mask.show");
+  if (open) hideModal(open);
+});
+
+/* =========================================================
+   6. 登录状态
+   ========================================================= */
+function isUnlocked() {
+  if (sessionStorage.getItem(K_SESSION) === "1") return true;
+  const until = parseInt(localStorage.getItem(K_REMEMBER) || "0", 10);
+  if (until && Date.now() < until) return true;
+  if (until) localStorage.removeItem(K_REMEMBER);
+  return false;
+}
+
+let attempts = 0, lockUntil = 0, cdTimer = null;
+
+function setMsg(text, type) {
+  msgEl.textContent = text || "";
+  msgEl.className = "msg" + (type ? " " + type : "");
+}
+function shake() {
+  lockCard.classList.remove("shake");
+  void lockCard.offsetWidth;
+  lockCard.classList.add("shake");
+}
+function startCountdown() {
+  clearInterval(cdTimer);
+  loginBtn.disabled = true;
+  const tick = () => {
+    const left = Math.ceil((lockUntil - Date.now()) / 1000);
+    if (left <= 0) {
+      clearInterval(cdTimer); cdTimer = null;
+      loginBtn.disabled = false;
+      loginBtn.textContent = "进 入";
+      setMsg("");
+    } else {
+      loginBtn.textContent = "锁定中 " + left + "s";
+      setMsg("错误次数过多，请 " + left + " 秒后再试", "error");
+    }
+  };
+  tick();
+  cdTimer = setInterval(tick, 250);
+}
+
+eyeBtn.addEventListener("click", () => {
+  const isPwd = pwdInput.type === "password";
+  pwdInput.type = isPwd ? "text" : "password";
+  eyeBtn.textContent = isPwd ? "🙈" : "👁";
+  pwdInput.focus();
+});
+
+loginForm.addEventListener("submit", e => {
+  e.preventDefault();
+
+  if (Date.now() < lockUntil) {
+    setMsg("尝试次数过多，请 " + Math.ceil((lockUntil - Date.now()) / 1000) + " 秒后再试", "error");
+    shake();
+    return;
+  }
+
+  const pwd = pwdInput.value;
+  if (!pwd) { setMsg("请输入密码", "error"); shake(); return; }
+
+  loginBtn.disabled = true;
+  loginBtn.textContent = "验证中…";
+
+  let ok = false;
+  try { ok = sha256Hex(pwd) === getPwdHash(); } catch (err) { ok = false; }
+
+  if (ok) {
+    attempts = 0;
+    setMsg("验证成功，正在进入…", "ok");
+    sessionStorage.setItem(K_SESSION, "1");
+    if (rememberChk.checked) {
+      localStorage.setItem(K_REMEMBER, String(Date.now() + 7 * 24 * 3600 * 1000));
+    }
+    setTimeout(showApp, 220);
+  } else {
+    attempts++;
+    pwdInput.value = "";
+    shake();
+    if (attempts >= MAX_ATTEMPTS) {
+      attempts = 0;
+      lockUntil = Date.now() + LOCK_SECONDS * 1000;
+      startCountdown();
+    } else {
+      loginBtn.disabled = false;
+      loginBtn.textContent = "进 入";
+      setMsg("密码错误，还剩 " + (MAX_ATTEMPTS - attempts) + " 次机会", "error");
+    }
+    pwdInput.focus();
+  }
+});
+
+/* =========================================================
+   7. 渲染
+   ========================================================= */
+function buildCard(s) {
+  const card = document.createElement("div");
+  card.className = "card";
+  card.dataset.id = s.id;
+  card.title = s.url;
+
+  const ico = document.createElement("span");
+  ico.className = "ico";
+  if (s.iconType === "image" && s.icon) {
+    const img = document.createElement("img");
+    img.src = s.icon;
+    img.alt = "";
+    img.onerror = () => { ico.innerHTML = ""; ico.textContent = "🌐"; };
+    ico.appendChild(img);
+  } else {
+    ico.textContent = s.icon || "🌐";
+  }
+
+  const meta = document.createElement("span");
+  meta.className = "meta";
+  const nm = document.createElement("span");
+  nm.className = "nm";
+  nm.textContent = s.name;
+  const ds = document.createElement("span");
+  ds.className = "ds";
+  ds.textContent = s.desc || hostOf(s.url);
+  meta.append(nm, ds);
+
+  const actions = document.createElement("span");
+  actions.className = "actions";
+  actions.innerHTML =
+    '<button class="mini" data-act="edit" title="编辑">✎</button>' +
+    '<button class="mini" data-act="del" title="删除">🗑</button>';
+
+  card.append(ico, meta, actions);
+  return card;
+}
+
+function render(filter) {
+  const q = (filter || "").trim().toLowerCase();
+  contentEl.innerHTML = "";
+
+  // 没有任何网站 → 空状态引导
+  if (sites.length === 0) {
+    const box = document.createElement("div");
+    box.className = "empty-state";
+    box.innerHTML =
+      '<div class="empty-ico">🗂️</div>' +
+      '<h3>还没有任何网站</h3>' +
+      '<p>点击下面的按钮，添加你的第一个网站</p>' +
+      '<button class="btn-primary" id="emptyAddBtn">＋ 添加网站</button>';
+    contentEl.appendChild(box);
+    box.querySelector("#emptyAddBtn").addEventListener("click", () => openSiteModal());
+    countEl.textContent = "0";
+    return;
+  }
+
+  const list = sites.filter(s => {
+    if (!q) return true;
+    return (s.name + " " + (s.desc || "") + " " + s.url + " " + (s.cat || ""))
+      .toLowerCase().includes(q);
+  });
+
+  if (list.length === 0) {
+    const p = document.createElement("p");
+    p.className = "empty";
+    p.textContent = "😕 没有找到匹配的网站";
+    contentEl.appendChild(p);
+    countEl.textContent = "0";
+    return;
+  }
+
+  // 按分类分组（保持添加顺序）
+  const groups = new Map();
+  list.forEach(s => {
+    const c = (s.cat || "").trim() || "未分类";
+    if (!groups.has(c)) groups.set(c, []);
+    groups.get(c).push(s);
+  });
+
+  groups.forEach((items, cat) => {
+    const sec = document.createElement("section");
+    sec.className = "group";
+
+    const h = document.createElement("h2");
+    h.className = "group-title";
+    h.textContent = cat;
+    sec.appendChild(h);
+
+    const grid = document.createElement("div");
+    grid.className = "grid";
+    items.forEach(s => grid.appendChild(buildCard(s)));
+    sec.appendChild(grid);
+
+    contentEl.appendChild(sec);
+  });
+
+  countEl.textContent = String(list.length);
+}
+
+// 卡片点击（事件委托）
+contentEl.addEventListener("click", e => {
+  const card = e.target.closest(".card");
+  if (!card) return;
+  const id = card.dataset.id;
+  const btn = e.target.closest("button[data-act]");
+
+  if (btn) {
+    e.stopPropagation();
+    if (btn.dataset.act === "edit") openSiteModal(id);
+    else if (btn.dataset.act === "del") deleteSite(id);
+    return;
+  }
+
+  const site = sites.find(s => s.id === id);
+  if (site) window.open(site.url, "_blank", "noopener");
+});
+
+/* =========================================================
+   8. 网站 增 / 改 / 删
+   ========================================================= */
+let editingId = null;
+
+function updateCatDatalist() {
+  const cats = [...new Set(sites.map(s => (s.cat || "").trim()).filter(Boolean))];
+  catList.innerHTML = "";
+  cats.forEach(c => {
+    const opt = document.createElement("option");
+    opt.value = c;
+    catList.appendChild(opt);
+  });
+}
+
+function updateIconPreview() {
+  const img = siteImg.value.trim();
+  const emoji = siteEmoji.value.trim();
+  iconPreview.innerHTML = "";
+  if (img) {
+    const i = document.createElement("img");
+    i.src = img;
+    i.onerror = () => { iconPreview.innerHTML = ""; iconPreview.textContent = "⚠️"; };
+    iconPreview.appendChild(i);
+  } else {
+    iconPreview.textContent = emoji || "🌐";
+  }
+}
+
+function openSiteModal(id) {
+  editingId = id || null;
+  const s = id ? sites.find(x => x.id === id) : null;
+
+  siteModalTitle.textContent = s ? "编辑网站" : "添加网站";
+  siteName.value  = s ? s.name : "";
+  siteUrl.value   = s ? s.url  : "";
+  siteDesc.value  = s ? (s.desc || "") : "";
+  siteCat.value   = s ? (s.cat  || "") : "";
+  siteEmoji.value = (s && s.iconType !== "image") ? (s.icon || "") : "";
+  siteImg.value   = (s && s.iconType === "image") ? s.icon : "";
+
+  updateCatDatalist();
+  updateIconPreview();
+  showModal(siteMask);
+  setTimeout(() => siteName.focus(), 130);
+}
+
+function saveSite() {
+  const name = siteName.value.trim();
+  let url = siteUrl.value.trim();
+
+  if (!name) { toast("请填写网站名称", "error"); siteName.focus(); return; }
+  if (!url)  { toast("请填写网站地址", "error"); siteUrl.focus(); return; }
+
+  url = normalizeUrl(url);
+
+  const img = siteImg.value.trim();
+  const emoji = siteEmoji.value.trim();
+  const iconType = img ? "image" : "emoji";
+  const icon = img || emoji || "🌐";
+  const cat = siteCat.value.trim() || "未分类";
+  const desc = siteDesc.value.trim();
+
+  if (editingId) {
+    const s = sites.find(x => x.id === editingId);
+    if (s) Object.assign(s, { name, url, icon, iconType, desc, cat });
+    toast("已保存修改", "ok");
+  } else {
+    sites.push({ id: uid(), name, url, icon, iconType, desc, cat });
+    toast("网站已添加", "ok");
+  }
+
+  saveSites();
+  render(searchInput.value);
+  hideModal(siteMask);
+}
+
+function deleteSite(id) {
+  const s = sites.find(x => x.id === id);
+  if (!s) return;
+  if (!confirm('确定要删除「' + s.name + '」吗？')) return;
+  sites = sites.filter(x => x.id !== id);
+  saveSites();
+  render(searchInput.value);
+  toast("已删除", "ok");
+}
+
+/* =========================================================
+   9. 修改密码
+   ========================================================= */
+function openPwdModal() {
+  oldPwd.value = "";
+  newPwd.value = "";
+  confirmPwd.value = "";
+  showModal(pwdMask);
+  setTimeout(() => oldPwd.focus(), 130);
+}
+
+function changePassword() {
+  const cur = oldPwd.value;
+  const np  = newPwd.value;
+  const cp  = confirmPwd.value;
+
+  if (!cur) { toast("请输入当前密码", "error"); oldPwd.focus(); return; }
+
+  let okCur = false;
+  try { okCur = sha256Hex(cur) === getPwdHash(); } catch (e) { okCur = false; }
+  if (!okCur) { toast("当前密码不正确", "error"); oldPwd.value = ""; oldPwd.focus(); return; }
+
+  if (np.length < 4) { toast("新密码至少 4 位", "error"); newPwd.focus(); return; }
+  if (np !== cp)     { toast("两次输入的新密码不一致", "error"); confirmPwd.value = ""; confirmPwd.focus(); return; }
+  if (np === cur)    { toast("新密码不能与当前密码相同", "error"); newPwd.focus(); return; }
+
+  setPwdHash(sha256Hex(np));
+  // 保持当前会话已解锁状态
+  sessionStorage.setItem(K_SESSION, "1");
+  hideModal(pwdMask);
+  toast("密码修改成功", "ok");
+}
+
+/* =========================================================
+   10. 导出 / 导入
+   ========================================================= */
+function exportData() {
+  const data = { version: 1, pwdHash: getPwdHash(), sites };
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "nav-backup-" + new Date().toISOString().slice(0, 10) + ".json";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(a.href), 1500);
+  toast("已导出备份文件", "ok");
+}
+
+function importData(file) {
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const data = JSON.parse(reader.result);
+      if (Array.isArray(data.sites)) {
+        sites = data.sites.map(s => ({
+          id: s.id || uid(),
+          name: s.name || "未命名",
+          url: normalizeUrl(s.url || ""),
+          icon: s.icon || "🌐",
+          iconType: s.iconType || "emoji",
+          desc: s.desc || "",
+          cat: s.cat || "未分类"
+        }));
+        saveSites();
+      }
+      if (typeof data.pwdHash === "string" && /^[0-9a-f]{64}$/i.test(data.pwdHash)) {
+        setPwdHash(data.pwdHash);
+      }
+      render(searchInput.value);
+      toast("导入成功", "ok");
+    } catch (e) {
+      toast("文件格式错误", "error");
+    }
+  };
+  reader.readAsText(file);
+}
+
+/* =========================================================
+   11. 事件绑定
+   ========================================================= */
+$("addBtn").addEventListener("click", () => openSiteModal());
+$("pwdBtn").addEventListener("click", openPwdModal);
+$("siteSaveBtn").addEventListener("click", saveSite);
+$("pwdSaveBtn").addEventListener("click", changePassword);
+
+$("exportBtn").addEventListener("click", exportData);
+$("importBtn").addEventListener("click", () => fileInput.click());
+fileInput.addEventListener("change", () => {
+  if (fileInput.files && fileInput.files[0]) importData(fileInput.files[0]);
+  fileInput.value = "";
+});
+
+siteEmoji.addEventListener("input", updateIconPreview);
+siteImg.addEventListener("input", updateIconPreview);
+
+// 弹窗内回车快捷保存
+[siteName, siteUrl, siteEmoji, siteImg, siteCat, siteDesc].forEach(el => {
+  el.addEventListener("keydown", e => {
+    if (e.key === "Enter") { e.preventDefault(); saveSite(); }
+  });
+});
+[oldPwd, newPwd, confirmPwd].forEach(el => {
+  el.addEventListener("keydown", e => {
+    if (e.key === "Enter") { e.preventDefault(); changePassword(); }
+  });
+});
+
+$("logoutBtn").addEventListener("click", () => {
+  sessionStorage.removeItem(K_SESSION);
+  localStorage.removeItem(K_REMEMBER);
+
+  appScreen.classList.add("hidden");
+  lockScreen.classList.remove("hidden");
+
+  clearInterval(cdTimer); cdTimer = null;
+  attempts = 0; lockUntil = 0;
+
+  pwdInput.value = "";
+  pwdInput.type = "password";
+  eyeBtn.textContent = "👁";
+  rememberChk.checked = false;
+  loginBtn.disabled = false;
+  loginBtn.textContent = "进 入";
+  setMsg("");
+  pwdInput.focus();
+});
+
+searchInput.addEventListener("input", () => render(searchInput.value));
+
+/* =========================================================
+   12. 启动
+   ========================================================= */
+function greeting() {
+  const h = new Date().getHours();
+  if (h < 6)  return "夜深了";
+  if (h < 12) return "早上好";
+  if (h < 14) return "中午好";
+  if (h < 18) return "下午好";
+  return "晚上好";
+}
+
+function showApp() {
+  lockScreen.classList.add("hidden");
+  appScreen.classList.remove("hidden");
+  welcomeEl.textContent = greeting() + "，欢迎回来";
+  searchInput.value = "";
+  render("");
+  setTimeout(() => searchInput.focus(), 80);
+}
+
+(function init() {
+  if (isUnlocked()) {
+    showApp();
+  } else {
+    pwdInput.focus();
+  }
+  console.log("%c默认密码 123456（进入后可在「修改密码」中更改）", "color:#5b8cff;font-size:12px");
+})();
+</script>
+</body>
+</html>
